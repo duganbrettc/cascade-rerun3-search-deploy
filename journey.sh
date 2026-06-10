@@ -1,10 +1,37 @@
 #!/usr/bin/env bash
 # Acceptance journey script for Sift stack
-# Usage: HOST_PORT=<port> ./journey.sh
+# Usage: HOST_PORT=<port> ./journey.sh  OR  BASE_URL=http://... ./journey.sh
+# Idempotent: if alice/bob already exist, falls back to login.
 set -euo pipefail
 
 BASE="${BASE_URL:-http://host.docker.internal:${HOST_PORT:-3000}}"
 echo "=== Sift Journey Test against $BASE ==="
+
+# Helper: signup or login, returns session_token
+signup_or_login() {
+  local username="$1"
+  local password="$2"
+  local resp
+  local code
+  resp=$(curl -s -w '\n%{http_code}' -X POST "$BASE/api/auth/signup" \
+    -H "Content-Type: application/json" \
+    -d "{\"username\":\"$username\",\"password\":\"$password\"}")
+  code=$(echo "$resp" | tail -1)
+  body=$(echo "$resp" | head -1)
+  if [ "$code" = "201" ]; then
+    echo "$body" | python3 -c "import sys,json; print(json.load(sys.stdin)['session_token'])"
+  elif [ "$code" = "409" ]; then
+    # already exists, login instead
+    local login_resp
+    login_resp=$(curl -sf -X POST "$BASE/api/auth/login" \
+      -H "Content-Type: application/json" \
+      -d "{\"username\":\"$username\",\"password\":\"$password\"}")
+    echo "$login_resp" | python3 -c "import sys,json; print(json.load(sys.stdin)['session_token'])"
+  else
+    echo "ERROR: signup returned HTTP $code: $body" >&2
+    return 1
+  fi
+}
 
 # Step 1: GET /healthz
 echo "[1] GET /healthz"
@@ -17,18 +44,14 @@ echo "  PASS: /healthz -> ok"
 
 # Step 2: Signup alice
 echo "[2] Signup alice"
-ALICE_RESP=$(curl -sf -X POST "$BASE/api/auth/signup" \
-  -H "Content-Type: application/json" \
-  -d '{"username":"alice","password":"alice123"}')
-ALICE_TOKEN=$(echo "$ALICE_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['session_token'])")
+ALICE_TOKEN=$(signup_or_login "alice" "alice123")
 if [ -z "$ALICE_TOKEN" ]; then
-  echo "FAIL: alice signup returned no token. Response: $ALICE_RESP"
+  echo "FAIL: alice signup/login returned no token"
   exit 1
 fi
-echo "  PASS: alice signed up, token received"
+echo "  PASS: alice signed up/logged in, token received"
 
 # Store token in a way that simulates localStorage
-echo "  [localStorage simulation] alice_token stored"
 STORED_TOKEN="$ALICE_TOKEN"
 if [ "$STORED_TOKEN" != "$ALICE_TOKEN" ]; then
   echo "FAIL: token not retained"
@@ -38,15 +61,12 @@ echo "  PASS: session token stored"
 
 # Step 3: Signup bob
 echo "[3] Signup bob"
-BOB_RESP=$(curl -sf -X POST "$BASE/api/auth/signup" \
-  -H "Content-Type: application/json" \
-  -d '{"username":"bob","password":"bob123"}')
-BOB_TOKEN=$(echo "$BOB_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['session_token'])")
+BOB_TOKEN=$(signup_or_login "bob" "bob123")
 if [ -z "$BOB_TOKEN" ]; then
-  echo "FAIL: bob signup returned no token. Response: $BOB_RESP"
+  echo "FAIL: bob signup/login returned no token"
   exit 1
 fi
-echo "  PASS: bob signed up"
+echo "  PASS: bob signed up/logged in"
 
 # Step 4: Bob posts a marker
 echo "[4] Bob posts a marker"
