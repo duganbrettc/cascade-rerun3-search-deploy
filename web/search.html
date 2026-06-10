@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sift - Search</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <nav>
+    <a href="/">Timeline</a>
+    <a href="/post">Post</a>
+    <a href="/profile">Profile</a>
+    <a href="/users">Users</a>
+    <a href="/search">Search</a>
+    <span class="spacer"></span>
+    <button class="logout-btn" id="logout-btn">Logout</button>
+  </nav>
+  <main class="container">
+    <h1>Search</h1>
+    <form id="search-form" class="search-form">
+      <input type="text" id="search-query" name="q" placeholder="Search posts and users..." required>
+      <button type="submit">Search</button>
+    </form>
+    <section class="results-section" id="posts-section">
+      <h2>Posts</h2>
+      <div id="posts-results"></div>
+    </section>
+    <section class="results-section" id="users-section">
+      <h2>Users</h2>
+      <div id="users-results"></div>
+    </section>
+  </main>
+  <script>
+    var token = localStorage.getItem('token');
+    if (!token) {
+      location.href = '/login';
+    }
+
+    document.getElementById('logout-btn').addEventListener('click', function() {
+      localStorage.removeItem('token');
+      location.href = '/login';
+    });
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function escapeRegex(str) {
+      return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    function highlightTerm(text, term) {
+      var escaped = escapeHtml(text);
+      if (!term) return escaped;
+      var re = new RegExp('(' + escapeRegex(escapeHtml(term)) + ')', 'gi');
+      return escaped.replace(re, '<mark>$1</mark>');
+    }
+
+    function renderPosts(posts, term) {
+      var container = document.getElementById('posts-results');
+      if (!posts || !posts.length) {
+        container.innerHTML = '<p class="empty-msg">No posts found.</p>';
+        return;
+      }
+      container.innerHTML = posts.map(function(post) {
+        var uname = escapeHtml(post.username || '');
+        var body = highlightTerm(post.body || '', term);
+        return '<div class="card">' +
+          '<a href="/users/' + uname + '" class="post-username">@' + uname + '</a>' +
+          '<div class="post-body">' + body + '</div>' +
+          '</div>';
+      }).join('');
+    }
+
+    function renderUsers(users) {
+      var container = document.getElementById('users-results');
+      if (!users || !users.length) {
+        container.innerHTML = '<p class="empty-msg">No users found.</p>';
+        return;
+      }
+      container.innerHTML = users.map(function(user) {
+        var uname = escapeHtml(user.username || '');
+        var dname = escapeHtml(user.display_name || user.username || '');
+        var bio = escapeHtml(user.bio || '');
+        return '<div class="card">' +
+          '<div class="user-info">' +
+          '<strong><a href="/users/' + uname + '" class="post-username" style="display:inline">' + dname + ' @' + uname + '</a></strong>' +
+          (bio ? '<p>' + bio + '</p>' : '') +
+          '</div>' +
+          '</div>';
+      }).join('');
+    }
+
+    document.getElementById('search-form').addEventListener('submit', async function(evt) {
+      evt.preventDefault();
+      var q = document.getElementById('search-query').value.trim();
+      if (!q) return;
+      document.getElementById('posts-results').innerHTML = '<p class="empty-msg">Searching...</p>';
+      document.getElementById('users-results').innerHTML = '';
+      try {
+        var res = await fetch('/api/search?q=' + encodeURIComponent(q), {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        if (res.status === 401) {
+          location.href = '/login';
+          return;
+        }
+        var data = await res.json();
+        renderPosts(data.posts || [], q);
+        renderUsers(data.users || []);
+      } catch (err) {
+        document.getElementById('posts-results').innerHTML = '<p class="empty-msg">Search failed. Please try again.</p>';
+        document.getElementById('users-results').innerHTML = '';
+      }
+    });
+  </script>
+</body>
+</html>

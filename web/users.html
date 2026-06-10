@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sift - Users</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <nav>
+    <a href="/">Timeline</a>
+    <a href="/post">Post</a>
+    <a href="/profile">Profile</a>
+    <a href="/users">Users</a>
+    <a href="/search">Search</a>
+    <span class="spacer"></span>
+    <button class="logout-btn" id="logout-btn">Logout</button>
+  </nav>
+  <main class="container">
+    <h1>Browse Users</h1>
+    <div id="users-container"></div>
+  </main>
+  <script>
+    var token = localStorage.getItem('token');
+    if (!token) {
+      location.href = '/login';
+    }
+
+    document.getElementById('logout-btn').addEventListener('click', function() {
+      localStorage.removeItem('token');
+      location.href = '/login';
+    });
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    async function loadUsers() {
+      try {
+        var res = await fetch('/api/users', {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        if (res.status === 401) {
+          location.href = '/login';
+          return;
+        }
+        var data = await res.json();
+        var users = Array.isArray(data) ? data : (data.users || []);
+        var container = document.getElementById('users-container');
+        if (!users.length) {
+          container.innerHTML = '<p class="empty-msg">No users found.</p>';
+          return;
+        }
+        container.innerHTML = users.map(function(user) {
+          var uname = escapeHtml(user.username || '');
+          var dname = escapeHtml(user.display_name || user.username || '');
+          var bio = escapeHtml(user.bio || '');
+          var following = user.is_following ? true : false;
+          return '<div class="card">' +
+            '<div class="user-row">' +
+            '<div class="user-info">' +
+            '<strong><a href="/users/' + uname + '" class="post-username" style="display:inline">' + dname + ' @' + uname + '</a></strong>' +
+            (bio ? '<p>' + bio + '</p>' : '') +
+            '</div>' +
+            '<button class="follow-btn' + (following ? ' following' : '') + '" data-username="' + uname + '" data-following="' + following + '">' +
+            (following ? 'Unfollow' : 'Follow') +
+            '</button>' +
+            '</div>' +
+            '</div>';
+        }).join('');
+      } catch (err) {
+        document.getElementById('users-container').innerHTML = '<p class="empty-msg">Failed to load users.</p>';
+      }
+    }
+
+    document.getElementById('users-container').addEventListener('click', async function(evt) {
+      var btn = evt.target.closest('.follow-btn');
+      if (!btn) return;
+      var username = btn.dataset.username;
+      var isFollowing = btn.dataset.following === 'true';
+      var method = isFollowing ? 'DELETE' : 'POST';
+      try {
+        var res = await fetch('/api/follow/' + encodeURIComponent(username), {
+          method: method,
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        if (res.ok) {
+          var nowFollowing = !isFollowing;
+          btn.dataset.following = nowFollowing;
+          btn.textContent = nowFollowing ? 'Unfollow' : 'Follow';
+          btn.className = 'follow-btn' + (nowFollowing ? ' following' : '');
+        }
+      } catch (err) {}
+    });
+
+    if (token) {
+      loadUsers();
+    }
+  </script>
+</body>
+</html>

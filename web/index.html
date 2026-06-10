@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sift - Timeline</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <nav>
+    <a href="/">Timeline</a>
+    <a href="/post">Post</a>
+    <a href="/profile">Profile</a>
+    <a href="/users">Users</a>
+    <a href="/search">Search</a>
+    <span class="spacer"></span>
+    <button class="logout-btn" id="logout-btn">Logout</button>
+  </nav>
+  <main class="container">
+    <h1>Timeline</h1>
+    <div id="posts-container"></div>
+  </main>
+  <script>
+    var token = localStorage.getItem('token');
+    if (!token) {
+      location.href = '/login';
+    }
+
+    document.getElementById('logout-btn').addEventListener('click', function() {
+      localStorage.removeItem('token');
+      location.href = '/login';
+    });
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    async function loadTimeline() {
+      try {
+        var res = await fetch('/api/timeline', {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        if (res.status === 401) {
+          location.href = '/login';
+          return;
+        }
+        var data = await res.json();
+        var posts = Array.isArray(data) ? data : (data.posts || []);
+        var container = document.getElementById('posts-container');
+        if (!posts.length) {
+          container.innerHTML = '<p class="empty-msg">No posts yet. Follow some users or <a href="/post">write something</a>!</p>';
+          return;
+        }
+        container.innerHTML = posts.map(function(post) {
+          var uname = escapeHtml(post.username || '');
+          var body = escapeHtml(post.body || '');
+          return '<div class="card">' +
+            '<a href="/users/' + uname + '" class="post-username">@' + uname + '</a>' +
+            '<div class="post-body">' + body + '</div>' +
+            '</div>';
+        }).join('');
+      } catch (err) {
+        document.getElementById('posts-container').innerHTML = '<p class="empty-msg">Failed to load timeline.</p>';
+      }
+    }
+
+    if (token) {
+      loadTimeline();
+    }
+  </script>
+</body>
+</html>

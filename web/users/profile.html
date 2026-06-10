@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sift - User</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <nav>
+    <a href="/">Timeline</a>
+    <a href="/post">Post</a>
+    <a href="/profile">Profile</a>
+    <a href="/users">Users</a>
+    <a href="/search">Search</a>
+    <span class="spacer"></span>
+    <button class="logout-btn" id="logout-btn">Logout</button>
+  </nav>
+  <main class="container">
+    <section id="user-profile-section">
+      <h1 id="page-title">User Profile</h1>
+      <div id="profile-card" class="card" style="display:none">
+        <p id="profile-bio" class="empty-msg" style="display:none"></p>
+        <div style="margin-top:10px">
+          <button id="follow-btn" class="follow-btn" style="display:none">Follow</button>
+        </div>
+      </div>
+    </section>
+    <section id="user-posts-section">
+      <h2>Posts</h2>
+      <div id="posts-container"></div>
+    </section>
+  </main>
+  <script>
+    var token = localStorage.getItem('token');
+    if (!token) {
+      location.href = '/login';
+    }
+
+    document.getElementById('logout-btn').addEventListener('click', function() {
+      localStorage.removeItem('token');
+      location.href = '/login';
+    });
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    var pathParts = location.pathname.split('/').filter(Boolean);
+    var username = decodeURIComponent(pathParts[pathParts.length - 1]);
+    document.getElementById('page-title').textContent = '@' + username;
+    document.title = 'Sift - @' + username;
+
+    var isFollowing = false;
+
+    async function loadUserProfile() {
+      try {
+        var res = await fetch('/api/users/' + encodeURIComponent(username), {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        if (res.status === 401) {
+          location.href = '/login';
+          return;
+        }
+        var user = await res.json();
+        var card = document.getElementById('profile-card');
+        card.style.display = 'block';
+        if (user.bio) {
+          var bioEl = document.getElementById('profile-bio');
+          bioEl.textContent = user.bio;
+          bioEl.style.display = 'block';
+        }
+        isFollowing = user.is_following ? true : false;
+        var btn = document.getElementById('follow-btn');
+        btn.style.display = 'inline-block';
+        btn.textContent = isFollowing ? 'Unfollow' : 'Follow';
+        btn.className = 'follow-btn' + (isFollowing ? ' following' : '');
+      } catch (err) {}
+    }
+
+    document.getElementById('follow-btn').addEventListener('click', async function() {
+      var method = isFollowing ? 'DELETE' : 'POST';
+      try {
+        var res = await fetch('/api/follow/' + encodeURIComponent(username), {
+          method: method,
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        if (res.ok) {
+          isFollowing = !isFollowing;
+          var btn = document.getElementById('follow-btn');
+          btn.textContent = isFollowing ? 'Unfollow' : 'Follow';
+          btn.className = 'follow-btn' + (isFollowing ? ' following' : '');
+        }
+      } catch (err) {}
+    });
+
+    async function loadUserPosts() {
+      try {
+        var res = await fetch('/api/posts/by/' + encodeURIComponent(username), {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        if (res.status === 401) {
+          location.href = '/login';
+          return;
+        }
+        var data = await res.json();
+        var posts = Array.isArray(data) ? data : (data.posts || []);
+        var container = document.getElementById('posts-container');
+        if (!posts.length) {
+          container.innerHTML = '<p class="empty-msg">No posts yet.</p>';
+          return;
+        }
+        container.innerHTML = posts.map(function(post) {
+          var body = escapeHtml(post.body || '');
+          return '<div class="card">' +
+            '<div class="post-body">' + body + '</div>' +
+            '</div>';
+        }).join('');
+      } catch (err) {
+        document.getElementById('posts-container').innerHTML = '<p class="empty-msg">Failed to load posts.</p>';
+      }
+    }
+
+    if (token) {
+      loadUserProfile();
+      loadUserPosts();
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sift - Profile</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <nav>
+    <a href="/">Timeline</a>
+    <a href="/post">Post</a>
+    <a href="/profile">Profile</a>
+    <a href="/users">Users</a>
+    <a href="/search">Search</a>
+    <span class="spacer"></span>
+    <button class="logout-btn" id="logout-btn">Logout</button>
+  </nav>
+  <main class="container">
+    <h1>Edit Profile</h1>
+    <div class="card">
+      <div id="error-msg" class="error" style="display:none"></div>
+      <div id="success-msg" class="success" style="display:none"></div>
+      <form id="profile-form">
+        <div class="form-group">
+          <label for="display_name">Display Name</label>
+          <input type="text" id="display_name" name="display_name" placeholder="Your display name">
+        </div>
+        <div class="form-group">
+          <label for="bio">Bio</label>
+          <textarea id="bio" name="bio" placeholder="Tell us about yourself"></textarea>
+        </div>
+        <button type="submit">Save Changes</button>
+      </form>
+    </div>
+  </main>
+  <script>
+    var token = localStorage.getItem('token');
+    if (!token) {
+      location.href = '/login';
+    }
+
+    document.getElementById('logout-btn').addEventListener('click', function() {
+      localStorage.removeItem('token');
+      location.href = '/login';
+    });
+
+    async function loadProfile() {
+      try {
+        var res = await fetch('/api/users/me', {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        if (res.status === 401) {
+          location.href = '/login';
+          return;
+        }
+        var data = await res.json();
+        if (data.display_name) document.getElementById('display_name').value = data.display_name;
+        if (data.bio) document.getElementById('bio').value = data.bio;
+      } catch (err) {}
+    }
+
+    document.getElementById('profile-form').addEventListener('submit', async function(evt) {
+      evt.preventDefault();
+      var errEl = document.getElementById('error-msg');
+      var succEl = document.getElementById('success-msg');
+      errEl.style.display = 'none';
+      succEl.style.display = 'none';
+      var display_name = document.getElementById('display_name').value.trim();
+      var bio = document.getElementById('bio').value.trim();
+      var payload = { display_name: display_name, bio: bio };
+      try {
+        var res = await fetch('/api/users/me', {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + token
+          },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) {
+          var data = await res.json().catch(function() { return {}; });
+          errEl.textContent = data.error || 'Failed to update profile.';
+          errEl.style.display = 'block';
+          return;
+        }
+        succEl.textContent = 'Profile updated successfully!';
+        succEl.style.display = 'block';
+      } catch (err) {
+        errEl.textContent = 'Network error. Please try again.';
+        errEl.style.display = 'block';
+      }
+    });
+
+    if (token) {
+      loadProfile();
+    }
+  </script>
+</body>
+</html>

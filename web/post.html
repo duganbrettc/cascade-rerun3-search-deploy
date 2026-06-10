@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sift - New Post</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <nav>
+    <a href="/">Timeline</a>
+    <a href="/post">Post</a>
+    <a href="/profile">Profile</a>
+    <a href="/users">Users</a>
+    <a href="/search">Search</a>
+    <span class="spacer"></span>
+    <button class="logout-btn" id="logout-btn">Logout</button>
+  </nav>
+  <main class="container">
+    <h1>New Post</h1>
+    <div class="card">
+      <div id="error-msg" class="error" style="display:none"></div>
+      <div id="success-msg" class="success" style="display:none"></div>
+      <form id="post-form">
+        <div class="form-group">
+          <label for="post-body">What's on your mind?</label>
+          <textarea id="post-body" name="body" placeholder="Write your post..."></textarea>
+        </div>
+        <button type="submit">Publish Post</button>
+      </form>
+    </div>
+  </main>
+  <script>
+    var token = localStorage.getItem('token');
+    if (!token) {
+      location.href = '/login';
+    }
+
+    document.getElementById('logout-btn').addEventListener('click', function() {
+      localStorage.removeItem('token');
+      location.href = '/login';
+    });
+
+    document.getElementById('post-form').addEventListener('submit', async function(evt) {
+      evt.preventDefault();
+      var errEl = document.getElementById('error-msg');
+      var succEl = document.getElementById('success-msg');
+      errEl.style.display = 'none';
+      succEl.style.display = 'none';
+      var body = document.getElementById('post-body').value.trim();
+      if (!body) {
+        errEl.textContent = 'Post body cannot be empty.';
+        errEl.style.display = 'block';
+        return;
+      }
+      try {
+        var res = await fetch('/api/posts', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + token
+          },
+          body: JSON.stringify({ body: body })
+        });
+        if (!res.ok) {
+          var data = await res.json().catch(function() { return {}; });
+          errEl.textContent = data.error || 'Failed to create post.';
+          errEl.style.display = 'block';
+          return;
+        }
+        document.getElementById('post-body').value = '';
+        succEl.textContent = 'Posted successfully!';
+        succEl.style.display = 'block';
+      } catch (err) {
+        errEl.textContent = 'Network error. Please try again.';
+        errEl.style.display = 'block';
+      }
+    });
+  </script>
+</body>
+</html>
